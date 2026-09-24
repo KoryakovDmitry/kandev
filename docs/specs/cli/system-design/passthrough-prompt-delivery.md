@@ -65,20 +65,22 @@ record but does not own the agent catalog.
 
 1. A caller resolves the session's capability record and asks the planner for
    the chunks of a prompt.
-2. The planner neutralizes framing terminators inside the body.
+2. If framing is selected, the planner neutralizes framing terminators inside the body.
 3. When the agent accepts bracketed-paste framing and the body is multi-line or
    larger than the raw-safe write size, the planner emits the framed body as one
    chunk. Small single-line bodies stay unframed, preserving today's bytes.
 4. When the agent does not accept bracketed-paste framing, the planner emits the
    body as consecutive chunks no larger than the raw-safe write size, each
    continuation chunk carrying the inter-chunk delay.
-5. The planner appends the submit keystroke as its own chunk carrying the submit
-   delay, for any agent that declares one.
-6. The caller writes each chunk in order, sleeping for the chunk's delay first.
+5. When `SubmitDelay > 0`, the planner appends the submit keystroke as its own
+   chunk carrying the submit delay. When `SubmitDelay == 0`, it appends the
+   submit sequence to the final body chunk.
+6. The caller writes each chunk in order, waiting for the chunk's delay with the
+   caller context first.
 
 Ordering is total: the PTY is a single stream, and the caller writes
-sequentially, so the receiving TUI observes the body exactly once, in order,
-followed by the submit keystroke.
+sequentially, so the body writes and submit keystroke are sent in order. The
+unframed pacing reduces burst loss but cannot confirm what the TUI consumed.
 
 ## Failure and recovery
 
@@ -90,7 +92,9 @@ would duplicate the already-written prefix in the agent's input.
 
 Delivery does not read the terminal back, so it cannot confirm what the TUI
 absorbed. Correctness therefore rests on framing and sizing rather than on
-acknowledgement, and any change to those rules needs evidence from a real TUI.
+acknowledgement. The 30 ms unframed interval is an empirical pacing policy, not
+a universal lossless-delivery guarantee. Any change to these rules needs
+evidence from a real TUI.
 
 ## Security
 

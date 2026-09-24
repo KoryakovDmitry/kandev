@@ -17,8 +17,10 @@ const (
 	// absorbs in one piece at any length.
 	passthroughRawSafeWriteBytes = 400
 
-	// passthroughRawWriteInterval spaces consecutive unframed writes so the TUI
-	// drains one read before the next arrives.
+	// passthroughRawWriteInterval spaces consecutive unframed writes to give the
+	// TUI time to drain one read before the next arrives. PTY writes provide no
+	// acknowledgement from the receiving TUI, so this is an empirical pacing
+	// policy rather than a delivery receipt.
 	passthroughRawWriteInterval = 30 * time.Millisecond
 )
 
@@ -69,11 +71,11 @@ func framePassthroughBody(prompt string, cfg PassthroughConfig) bool {
 // submit sequence. A framed body is one write at any length; an unframed body is
 // paced so no single write exceeds what the TUI can absorb in one read.
 func planBodyChunks(prompt string, cfg PassthroughConfig) []PassthroughStdinChunk {
-	body := stripPasteMarkers(prompt)
 	if framePassthroughBody(prompt, cfg) {
+		body := stripPasteMarkers(prompt)
 		return []PassthroughStdinChunk{{Data: bracketedPasteStart + body + bracketedPasteEnd}}
 	}
-	return paceRawBody(body)
+	return paceRawBody(prompt)
 }
 
 // paceRawBody splits an unframed body into writes within the raw-safe size,
@@ -113,11 +115,11 @@ func paceRawBody(body string) []PassthroughStdinChunk {
 // delimiters, so embedded newlines are not treated as premature Enter presses
 // and a long body is not split across terminal reads the TUI can drop.
 func BuildPassthroughPayload(prompt string, cfg PassthroughConfig) string {
-	body := stripPasteMarkers(prompt)
 	if framePassthroughBody(prompt, cfg) {
-		body = bracketedPasteStart + body + bracketedPasteEnd
+		body := stripPasteMarkers(prompt)
+		return bracketedPasteStart + body + bracketedPasteEnd + PassthroughSubmitSequence(cfg)
 	}
-	return body + PassthroughSubmitSequence(cfg)
+	return prompt + PassthroughSubmitSequence(cfg)
 }
 
 // PlanPassthroughStdinChunks plans PTY stdin writes for a passthrough prompt.

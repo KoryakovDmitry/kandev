@@ -117,6 +117,22 @@ func TestPlanPassthroughStdinChunks_NeutralizesFramingTerminators(t *testing.T) 
 	}
 }
 
+func TestPlanPassthroughStdinChunks_UnframedPreservesFramingMarkers(t *testing.T) {
+	cfg := PassthroughConfig{SubmitSequence: "\r", DisableBracketedPaste: true}
+	prompt := "literal " + bracketedPasteStart + " marker " + bracketedPasteEnd
+
+	chunks := PlanPassthroughStdinChunks(prompt, cfg)
+	if len(chunks) != 1 {
+		t.Fatalf("got %d chunks, want one atomic write: %#v", len(chunks), chunks)
+	}
+	if got, want := chunks[0].Data, prompt+"\r"; got != want {
+		t.Errorf("unframed payload = %q, want %q", got, want)
+	}
+	if got := BuildPassthroughPayload(prompt, cfg); got != prompt+"\r" {
+		t.Errorf("BuildPassthroughPayload = %q, want literal markers preserved", got)
+	}
+}
+
 func chunkLengths(chunks []PassthroughStdinChunk) []int {
 	out := make([]int, len(chunks))
 	for i, c := range chunks {
